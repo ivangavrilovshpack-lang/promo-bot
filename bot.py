@@ -6,6 +6,9 @@ import threading
 import time
 import random
 import parser
+from flask import Flask
+
+app = Flask(__name__)
 
 bot = telebot.TeleBot(config.TOKEN)
 
@@ -67,8 +70,12 @@ def auto_publish():
             except:
                 pass
 
+@app.route('/')
+def home():
+    return "Бот работает!"
+
 if __name__ == "__main__":
     db.init_db()
     threading.Thread(target=auto_publish, daemon=True).start()
-    print("🤖 Бот запущен!")
-    bot.polling(none_stop=True)
+    threading.Thread(target=bot.polling, daemon=True).start()
+    app.run(host='0.0.0.0', port=10000)
