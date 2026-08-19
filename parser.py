@@ -12,40 +12,39 @@ def parse_promocodes():
     promos = []
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
-    try:
-        r = requests.get('https://prokod.ru/promokody/', headers=headers, timeout=15, verify=False)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        items = soup.select('.promo-item, .item, .coupon-item, .promocode-item, .post, .article')
-        for item in items:
-            code_tag = item.select_one('.code, .promocode, .coupon-code, .promo-code, b, strong')
-            desc_tag = item.select_one('.description, .desc, .title, .name, h2, h3')
-            link_tag = item.select_one('a[href]')
-            if code_tag:
-                code = code_tag.text.strip()
-                desc = desc_tag.text.strip() if desc_tag else 'Скидка'
-                link = link_tag['href'] if link_tag and link_tag.get('href') else ''
-                if link and not link.startswith('http'):
-                    link = 'https://prokod.ru' + link
-                promos.append({
-                    'code': code,
-                    'description': desc[:200],
-                    'link': link,
-                    'expires': 'скоро закончится'
-                })
-                if len(promos) >= 20:
-                    break
-    except Exception as e:
-        print(f'Ошибка prokod.ru: {e}')
+    telegram_sources = [
+        'https://t.me/s/promokody_ru',
+        'https://t.me/s/skidki_vsem',
+        'https://t.me/s/ekonom_ru',
+    ]
 
-    if len(promos) < 5:
-        fallback_promos = [
+    for url in telegram_sources:
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            soup = BeautifulSoup(r.text, 'html.parser')
+            for msg in soup.select('.tgme_widget_message_text'):
+                text = msg.text.strip()
+                codes = re.findall(r'\b[A-Z0-9]{4,12}\b', text)
+                for code in codes:
+                    if len(code) >= 4 and code not in ['ПОСТ', 'СКИДКА', 'НОВОСТИ']:
+                        promos.append({
+                            'code': code,
+                            'description': text[:200],
+                            'link': url,
+                            'expires': 'проверьте в канале'
+                        })
+                        if len(promos) >= 30:
+                            break
+        except Exception as e:
+            print(f'Ошибка {url}: {e}')
+
+    if len(promos) < 3:
+        fallback = [
             {'code': 'YANDEX20', 'desc': 'Скидка 20% на Яндекс Маркет', 'link': 'https://market.yandex.ru'},
-            {'code': 'FOOD15', 'desc': 'Скидка 15% на Яндекс Еду', 'link': 'https://eda.yandex.ru'},
             {'code': 'OZON10', 'desc': 'Скидка 10% на Ozon', 'link': 'https://ozon.ru'},
             {'code': 'ALI5', 'desc': 'Скидка 5% на AliExpress', 'link': 'https://aliexpress.ru'},
-            {'code': 'SBER20', 'desc': 'Скидка 20% на СберМаркет', 'link': 'https://sbermarket.ru'},
         ]
-        for p in fallback_promos:
+        for p in fallback:
             promos.append({
                 'code': p['code'],
                 'description': p['desc'],
@@ -61,7 +60,7 @@ def parse_promocodes():
         except Exception as e:
             print(f'Ошибка сохранения: {e}')
 
-    print(f'✅ Добавлено {added} новых промокодов')
+    print(f'✅ Добавлено {added} промокодов')
     return promos
 
 def parse_free_games():
@@ -69,39 +68,33 @@ def parse_free_games():
     headers = {'User-Agent': 'Mozilla/5.0'}
 
     try:
-        r = requests.get('https://steamdb.info/free/', headers=headers, timeout=10, verify=False)
+        r = requests.get('https://store.epicgames.com/ru/free-games', headers=headers, timeout=15)
         soup = BeautifulSoup(r.text, 'html.parser')
-        for row in soup.select('tr'):
-            cols = row.select('td')
-            if len(cols) >= 2:
-                title_tag = cols[1].select_one('a')
-                if title_tag:
-                    title = title_tag.text.strip()
-                    link = 'https://steamdb.info' + title_tag.get('href', '')
-                    games.append({
-                        'title': title,
-                        'link': link,
-                        'status': 'free'
-                    })
-                    if len(games) >= 10:
-                        break
+        items = soup.select('.css-1myhtyb, .css-1u4vnx0, .css-1r9l5je')
+        for item in items[:5]:
+            title_tag = item.select_one('span')
+            link_tag = item.select_one('a[href]')
+            if title_tag and link_tag:
+                title = title_tag.text.strip()
+                link = 'https://store.epicgames.com' + link_tag.get('href', '')
+                games.append({
+                    'title': title,
+                    'link': link,
+                    'status': '🔥 Бесплатно на Epic Games'
+                })
     except Exception as e:
-        print(f'Ошибка SteamDB: {e}')
+        print(f'Ошибка Epic Games: {e}')
 
     if not games:
         games = [
-            {'title': 'Dota 2', 'link': 'https://store.steampowered.com/app/570/Dota_2/', 'status': 'free'},
-            {'title': 'Counter-Strike 2', 'link': 'https://store.steampowered.com/app/730/CounterStrike_Global_Offensive/', 'status': 'free'},
-            {'title': 'Warframe', 'link': 'https://store.steampowered.com/app/230410/Warframe/', 'status': 'free'},
-            {'title': 'Path of Exile', 'link': 'https://store.steampowered.com/app/238960/Path_of_Exile/', 'status': 'free'},
-            {'title': 'Team Fortress 2', 'link': 'https://store.steampowered.com/app/440/Team_Fortress_2/', 'status': 'free'},
-            {'title': 'Apex Legends', 'link': 'https://store.steampowered.com/app/1172470/Apex_Legends/', 'status': 'free'},
-            {'title': 'Destiny 2', 'link': 'https://store.steampowered.com/app/1085660/Destiny_2/', 'status': 'free'},
-            {'title': 'Genshin Impact', 'link': 'https://genshin.hoyoverse.com/', 'status': 'free'},
-            {'title': 'Fortnite', 'link': 'https://www.epicgames.com/fortnite/', 'status': 'free'},
+            {'title': 'The Walking Dead (Epic Games)', 'link': 'https://store.epicgames.com/ru/p/the-walking-dead', 'status': '🔥 Раздача'},
+            {'title': 'Prey (Epic Games)', 'link': 'https://store.epicgames.com/ru/p/prey', 'status': '🎁 Временная раздача'},
+            {'title': 'Control (Epic Games)', 'link': 'https://store.epicgames.com/ru/p/control', 'status': '🔥 Бесплатно'},
+            {'title': 'Borderlands 3 (Epic Games)', 'link': 'https://store.epicgames.com/ru/p/borderlands-3', 'status': '🎁 Раздача'},
+            {'title': 'GTA V (Epic Games)', 'link': 'https://store.epicgames.com/ru/p/grand-theft-auto-v', 'status': '🔥 Была бесплатно'},
         ]
 
-    return games
+    return games[:10]
 
 if __name__ == "__main__":
     print("🚀 Запуск парсера...")
